@@ -17,8 +17,8 @@ from chat_with_nerf.chat.system_prompt import (
 from chat_with_nerf.settings import Settings
 from chat_with_nerf.util import list_dirs
 
-scene_name = "home_1"
-agent = Agent(scene_name="home_1")
+scene_name = "scene0025_00"
+agent = Agent(scene_name="scene0025_00")
 default_system_msg = INTERACTIVE_MODE_SYSTEM_PROMPT
 prompt_mapping = OrderedDict(
     [
@@ -55,7 +55,7 @@ def change_scene_or_system_prompt(
     new_session.working_scene_name = dropdown_scene_selection
     agent.scene_name = dropdown_scene_selection
     file_name = (
-        "scene_for_gradio_v7.obj"
+        "scene.obj"
         if dropdown_scene_selection.startswith("s")
         else "poly.glb"
     )
@@ -71,11 +71,7 @@ def change_scene_or_system_prompt(
     )
 
 
-title = """<h1 align="center">🔥 LLM-Grounder with GPT-4 🚀</h1>
-<p><center>
-<a href="https://chat-with-nerf.github.io/" target="_blank">[Project Page]</a>
-<a href="https://github.com/sled-group/chat-with-nerf" target="_blank">[Code]</a>
-</center></p>
+title = """<h1 align="center"> LLM-Grounder with GPT-4 </h1>
 """
 
 # <div style="background-color:yellow;color:white;padding:2%;">
@@ -123,7 +119,7 @@ with gr.Blocks() as demo:
                     value=Settings.data_path
                     + f"/{scene_name}"
                     + (
-                        "/scene_for_gradio_v7.obj"
+                        "/scene.obj"
                         if scene_name.startswith("s")
                         else "/poly.glb"
                     ),
@@ -286,6 +282,12 @@ with gr.Blocks() as demo:
             dropdown_scene,
             session_state,
         ],
+        # fn=agent.act_no_gpt,
+        # inputs=[
+        #     user_chat_input,
+        #     dropdown_scene,
+        #     session_state,
+        # ],
         outputs=[
             chat_history_for_display,
             chat_counter,
@@ -304,6 +306,12 @@ with gr.Blocks() as demo:
             dropdown_scene,
             session_state,
         ],
+        # fn=agent.act_no_gpt,
+        # inputs=[
+        #     user_chat_input,
+        #     dropdown_scene,
+        #     session_state,
+        # ],
         outputs=[
             chat_history_for_display,
             chat_counter,

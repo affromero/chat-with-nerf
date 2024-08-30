@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import json
 import os
@@ -11,7 +12,7 @@ from chat_with_nerf import logger
 from chat_with_nerf.settings import Settings
 
 
-@define
+@dataclass
 class Session:
     """A class to store the all information about a session, including the chat
     history and the current scene."""
@@ -22,7 +23,6 @@ class Session:
     chat_history_for_llm: list[tuple]
     chat_history_for_display: list[tuple]
     chat_counter: int
-    image_id_to_path: dict[int, str] = field(factory=dict)
     grounding_result_mesh_path: str | None = None
     ground_result: list[tuple[float]] | None = None
     candidate: list | None = None

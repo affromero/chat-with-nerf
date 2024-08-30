@@ -8,41 +8,47 @@ include-package-data = false
 [tool.setuptools.packages.find]
 include = ["chat_with_nerf"]
 
-[project]
+[tool.poetry]
 name = "chat_with_nerf"
 version = "0.1.0"
 description = "Chat with NeRF"
 readme = "README.md"
-requires-python = ">=3.10.0"
-license = { text="Apache 2.0"}
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python",
-]
+authors = ["andres"]
 
-dependencies = [
-    "glob2==0.7",
-    "setuptools>=67.7.2",
-    "pathtools>=0.1.2",
-    "promise>=2.3",
-    "pybind11>=2.10.4",
-    "pyyaml>=6.0",
-    "numpy>=1.24.3",
-    "attrs>=23.1.0",
-    "omegaconf>=2.3.0",
-    "gradio>=3.30.0",
-    "torch",
-    "Pillow>=9.5.0",
-    "torchtyping",
-    "nerfstudio>=0.3.0",
-    "lerf>=0.1.0",
-    "cattrs",
-    "types-requests",
-    "einops==0.6.1",
-    "h5py==3.8.0",
-    "scikit-learn==1.2.2",
-    "trimesh==3.21.7"
-]
+[tool.poetry.dependencies]
+python = "==3.10.10"
+glob2 = "==0.7"
+setuptools= "^67.7.2"
+pathtools= "^0.1.2"
+promise = "^2.3"
+pybind11 = "^2.10.4"
+pyyaml = "^6.0"
+numpy = "^1.24.3"
+attrs = "^23.1.0"
+omegaconf = "^2.3.0"
+gradio = "^3"
+torch = {source = "PytorchCuda", version = "1.13.1"}
+Pillow = "^9.5.0"
+torchtyping = "==0.1.4"
+nerfstudio = "0.3.4"
+#nerfstudio = {git = "git@github.com:sled-group/nerfstudio_export.git", rev="4e4d985105c1c3d07ab62a3452107f51ebad652f"}
+cattrs = "==23.2.3"
+types-requests = "==2.32.0.20240622"
+einops = "==0.6.1"
+h5py = "==3.8.0"
+scikit-learn = "==1.2.2"
+trimesh = "==3.21.7"
+addict = "^2.4.0"
+lerf = {git = "git@github.com:sled-group/lerf_lite.git", rev="fd4ea8d276e0b13f3157307bbce3d2ac0d2b9394"}
+transformers = {git = "git@github.com:huggingface/transformers.git", rev="cae78c46d658a8e496a815c2ee49b9b178fb9c9a"}
+viser = "0.1.3"
+ninja = "^1.11.1.1"
+fastapi = "0.103"
+
+[[tool.poetry.source]]
+name = "PytorchCuda"
+priority = "explicit"
+url = "https://download.pytorch.org/whl/cu117"
 
 [project.optional-dependencies]
 

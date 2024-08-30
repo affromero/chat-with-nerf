@@ -1,0 +1,3 @@
+[submodule "tiny-cuda-nn"]
+	path = tiny-cuda-nn
+	url = ./tiny-cuda-nn/

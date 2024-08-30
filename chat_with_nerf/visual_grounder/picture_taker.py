@@ -1169,9 +1169,10 @@ class PictureTakerFactory:
             h5_dict = PictureTakerFactory.load_h5_file(scene_config.load_h5_config)
             mesh = PictureTakerFactory.load_inthewild_mesh(scene_config.load_mesh)
             thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
-            lerf_pipeline = PictureTakerFactory.initialize_lerf_pipeline(
-                scene_config.load_lerf_config, scene_name
-            )
+            # lerf_pipeline = PictureTakerFactory.initialize_lerf_pipeline(
+            #     scene_config.load_lerf_config, scene_name
+            # )
+            lerf_pipeline = None
             picture_taker_dict[scene_name] = PictureTaker(
                 scene=scene_config.scene_name,
                 scene_config=scene_config,
@@ -1238,11 +1239,8 @@ class PictureTakerFactory:
         initial_dir = os.getcwd()
         print(str(Settings.NERF_DATA_PATH + "/" + scene_name))
         os.chdir(Settings.NERF_DATA_PATH + "/" + scene_name)
-        _, lerf_pipeline, _, _ = eval_setup(
-            Path(load_config),
-            eval_num_rays_per_chunk=None,
-            test_mode="test",
-        )
+        import pdb; pdb.set_trace()
+        _, lerf_pipeline, _, _ = eval_setup(Path(load_config), eval_num_rays_per_chunk=None, test_mode="inference")
         os.chdir(initial_dir)
         return lerf_pipeline
 
@@ -1251,7 +1249,8 @@ class PictureTakerFactory:
         print(load_config)
         hdf5_file = h5py.File(load_config, "r")
         # batch_idx = 5
-        points = hdf5_file["points"]["points"][:]
+        points = hdf5_file["points_scannet"]["points_scannet"][:]
+        # points = hdf5_file["points"]["points"][:]
         origins = hdf5_file["origins"]["origins"][:]
         directions = hdf5_file["directions"]["directions"][:]
 

@@ -3,21 +3,15 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import torch
 import yaml
 from attrs import define
 
-# from lavis.models import load_model_and_preprocess  # type: ignore
-from llava import LlavaLlamaForCausalLM
-from llava.utils import disable_torch_init
-from transformers import AutoTokenizer, CLIPImageProcessor, CLIPVisionModel
 
 from chat_with_nerf import logger
 from chat_with_nerf.model.scene_config import SceneConfig
 from chat_with_nerf.settings import Settings
 from chat_with_nerf.visual_grounder.captioner import (  # Blip2Captioner,
     BaseCaptioner,
-    LLaVaCaptioner,
 )
 from chat_with_nerf.visual_grounder.picture_taker import (
     PictureTaker,
@@ -66,25 +60,26 @@ class ModelContextManager:
         return cls.model_context
 
     @classmethod
-    def get_model_context_with_gpt(cls) -> ModelContext:
+    def get_model_context_with_gpt(cls, scene_name: str) -> ModelContext:
         if Settings.IS_EVALUATION:
             return (
-                ModelContextManager.initialize_model_no_visual_feedback_openscene_context()
+                ModelContextManager.initialize_model_no_visual_feedback_openscene_context(scene_name)
             )
         elif cls.model_context is None:
             cls.model_context = (
-                ModelContextManager.initialize_model_no_visual_feedback_openscene_context()
+                ModelContextManager.initialize_model_no_visual_feedback_openscene_context(scene_name)
             )
         return cls.model_context
 
     @classmethod
     def initialize_model_no_visual_feedback_openscene_context(
-        cls,
+        cls, scene_name: str
     ) -> ModelContext:
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         sys.path.append(project_root)
         logger.info("Search for all Scenes and Set the current Scene")
-        scene_configs = ModelContextManager.search_scenes(Settings.data_path)
+        data_path = Path(Settings.data_path) / scene_name
+        scene_configs = ModelContextManager.search_scenes(data_path)
         picture_taker_dict = (
             PictureTakerFactory.get_picture_takers_no_visual_feedback_openscene(
                 scene_configs
@@ -98,11 +93,14 @@ class ModelContextManager:
         sys.path.append(project_root)
         logger.info("Search for all Scenes and Set the current Scene")
         scene_configs = ModelContextManager.search_scenes(
-            Settings.data_path, scene_name
+            Path(Settings.data_path) / scene_name
         )
         picture_taker_dict = PictureTakerFactory.get_picture_takers_no_gpt(
             scene_configs
         )
+        # picture_taker_dict = PictureTakerFactory.get_picture_takers_no_visual_feedback_openscene(
+        #     scene_configs
+        # )
         return ModelContext(scene_configs, picture_taker_dict, None)
 
     @staticmethod
@@ -137,86 +135,35 @@ class ModelContextManager:
         return ModelContext(scene_configs, picture_taker_dict, None)
 
     @staticmethod
-    def search_scenes(path: str) -> dict[str, SceneConfig]:
+    def search_scenes(path: str | Path) -> dict[str, SceneConfig]:
         scenes = {}
-        subdirectories = [
-            name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name))
-        ]
-        for subdir in subdirectories:
-            try:
-                scene_path = (Path(path) / subdir / subdir).with_suffix(".yaml")
-                logger.info(f"scene_path: {scene_path}")
-                with open(scene_path, encoding="utf-8") as f:
-                    data = yaml.safe_load(f)
-                scene = SceneConfig(
-                    subdir,
-                    data["load_lerf_config"],
-                    data["load_embedding"],
-                    data["camera_path"],
-                    data["nerf_exported_mesh_path"],
-                    data["load_openscene"],
-                    data["load_mesh"],
-                    data["load_metadata"],
-                )
-                scenes[subdir] = scene
-            except FileNotFoundError:
-                raise ValueError(f"Scene {subdir} not found in {path}")
+        path = Path(path).resolve()
+        sc_name = os.path.basename(path)
+        logger.info(f"path: {path}")
+        scene_path = (Path(path) / sc_name).with_suffix(".yaml")
+        logger.info(f"scene_path: {scene_path}")
+        with open(scene_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        replacements = {
+            "/workspace/chat-with-nerf-dev/chat-with-nerf/data": "data/lerf_data_experiments/",
+            "/workspace/chat-with-nerf-eval/data/scannet": "data/scannet",
+            "/workspace/openscene_data": "data/openscene_data",
+        }
 
+        for key, value in replacements.items():
+            for k, v in data.items():
+                if isinstance(v, str):
+                    data[k] = v.replace(key, value)
+        logger.info(f"scene data: {data}")
+        scene = SceneConfig(
+            sc_name,
+            data["load_lerf_config"],
+            data["load_embedding"],
+            data["camera_path"],
+            data["nerf_exported_mesh_path"],
+            data["load_openscene"],
+            data["load_mesh"],
+            data["load_metadata"],
+        )
+        scenes[sc_name] = scene
         return scenes
-
-    @staticmethod
-    def initiaze_llava_captioner() -> LLaVaCaptioner:
-        disable_torch_init()
-        model_name = os.path.expanduser(Settings.LLAVA_PATH)
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        model = LlavaLlamaForCausalLM.from_pretrained(
-            model_name,
-            low_cpu_mem_usage=True,
-            torch_dtype=torch.float16,
-            use_cache=True,
-        ).cuda()
-        image_processor = CLIPImageProcessor.from_pretrained(
-            model.config.mm_vision_tower, torch_dtype=torch.float16
-        )
-
-        image_processor = {"image_processor": image_processor}
-        mm_use_im_start_end = getattr(model.config, "mm_use_im_start_end", False)
-        tokenizer.add_tokens([Settings.DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
-        if mm_use_im_start_end:
-            tokenizer.add_tokens(
-                [Settings.DEFAULT_IM_START_TOKEN, Settings.DEFAULT_IM_END_TOKEN],
-                special_tokens=True,
-            )
-        vision_tower = model.get_model().vision_tower[0]
-        if vision_tower.device.type == "meta":
-            vision_tower = CLIPVisionModel.from_pretrained(
-                vision_tower.config._name_or_path,
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True,
-            ).cuda()
-            model.get_model().vision_tower[0] = vision_tower
-        else:
-            vision_tower.to(device="cuda", dtype=torch.float16)
-        vision_config = vision_tower.config
-        vision_config.im_patch_token = tokenizer.convert_tokens_to_ids(
-            [Settings.DEFAULT_IMAGE_PATCH_TOKEN]
-        )[0]
-        vision_config.use_im_start_end = mm_use_im_start_end
-        if mm_use_im_start_end:
-            (
-                vision_config.im_start_token,
-                vision_config.im_end_token,
-            ) = tokenizer.convert_tokens_to_ids(
-                [Settings.DEFAULT_IM_START_TOKEN, Settings.DEFAULT_IM_END_TOKEN]
-            )
-        image_token_len = (vision_config.image_size // vision_config.patch_size) ** 2
-
-        captioner = LLaVaCaptioner(
-            model,
-            image_processor,
-            tokenizer,
-            mm_use_im_start_end,
-            image_token_len,
-        )
-        return captioner

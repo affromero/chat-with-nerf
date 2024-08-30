@@ -29,10 +29,12 @@ class Agent:
     API_URL: str = attr.field(default=str(os.getenv("API_URL")))
     OPENAI_API_KEY: str = attr.field(default=str(os.getenv("OPENAI_API_KEY")))
     MAX_ITERATION: int = 10
-    scene_name: str = attr.field(default="scene0025_00")
+    scene_name: str = attr.field(default="scene0019_00")
 
     def __attrs_post_init__(self):
         # Check for fake grounder
+        print("API_URL: ", self.API_URL)
+        print("OPENAI_API_KEY: ", self.OPENAI_API_KEY)
         if self.scene_name is None:
             raise ValueError("default scene_name is not set")
 
@@ -42,7 +44,7 @@ class Agent:
                     self.scene_name
                 )
             else:
-                self.model_context = ModelContextManager.get_model_context_with_gpt()
+                self.model_context = ModelContextManager.get_model_context_with_gpt(self.scene_name)
         else:
             self.model_context = ModelContext(
                 scene_configs=None,
@@ -75,9 +77,13 @@ class Agent:
         temperature: float,
         session: Session,
     ) -> Generator[tuple[Session, Response | None], None, None]:
+        # headers = {
+        #     "Content-Type": "application/json",
+        #     "api-key": self.OPENAI_API_KEY,
+        # }
         headers = {
             "Content-Type": "application/json",
-            "api-key": self.OPENAI_API_KEY,
+            "Authorization": f"Bearer {self.OPENAI_API_KEY}"
         }
         # find base mesh path
         if system_msg.strip() == "":
