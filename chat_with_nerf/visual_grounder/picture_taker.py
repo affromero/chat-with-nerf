@@ -900,7 +900,6 @@ class PictureTaker:
         text = clip.tokenize([positive_phrase]).to(self.device)
         with torch.no_grad():
             text_features = self.clip_model.encode_text(text)
-
         clip_embedding_numpy = torch.from_numpy(self.openscene_embedding)
         clip_embedding_numpy = clip_embedding_numpy.to(self.device)
         text_features = text_features.float()
@@ -954,25 +953,6 @@ class PictureTaker:
 class PictureTakerFactory:
     picture_taker_dict: Optional[dict[str, PictureTaker]] = None
 
-    @classmethod
-    def get_picture_takers(
-        cls, scene_configs: dict[str, SceneConfig]
-    ) -> dict[str, PictureTaker]:
-        return PictureTakerFactory.initialize_picture_takers(scene_configs)
-
-    @classmethod
-    def get_picture_takers_no_visual_feedback(
-        cls, scene_configs: dict[str, SceneConfig]
-    ) -> dict[str, PictureTaker]:
-        return PictureTakerFactory.initialize_picture_takers_no_visual_feedback(
-            scene_configs
-        )
-
-    @classmethod
-    def get_picture_takers_no_gpt(
-        cls, scene_configs: dict[str, SceneConfig]
-    ) -> dict[str, PictureTaker]:
-        return PictureTakerFactory.initialize_picture_takers_no_gpt(scene_configs)
 
     @classmethod
     def get_picture_takers_no_visual_feedback_openscene(
@@ -988,15 +968,10 @@ class PictureTakerFactory:
             picture_taker_dict_inthewild = {}
             picture_taker_dict_scannet = {}
             if selected_configs_scannet:
-                picture_taker_dict_inthewild = PictureTakerFactory.initialize_picture_takers_no_visual_feedback_openscene(
-                    selected_configs_scannet
-                )
+                picture_taker_dict_scannet = PictureTakerFactory.initialize_picture_takers_no_visual_feedback_openscene(selected_configs_scannet)
+                # picture_taker_dict_scannet = PictureTakerFactory.initialize_picture_takers_no_gpt(selected_configs_scannet)
             if selected_configs_inthewild:
-                picture_taker_dict_scannet = (
-                    PictureTakerFactory.initialize_picture_takers_no_gpt(
-                        selected_configs_inthewild
-                    )
-                )
+                picture_taker_dict_inthewild = PictureTakerFactory.initialize_picture_takers_no_gpt(selected_configs_inthewild)
             combined_dict = {
                 **picture_taker_dict_inthewild,
                 **picture_taker_dict_scannet,
@@ -1019,7 +994,6 @@ class PictureTakerFactory:
         picture_taker_dict = {}
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model, preprocess = clip.load("ViT-L/14@336px", device=device)
-
         for scene_name, scene_config in scene_configs.items():
             openscene_embedding = PictureTakerFactory.load_openscene(
                 scene_config.load_openscene
@@ -1028,7 +1002,6 @@ class PictureTakerFactory:
                 scene_config.load_mesh, scene_config.load_metadata
             )
             thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
-
             picture_taker_dict[scene_name] = PictureTaker(
                 scene=scene_config.scene_name,
                 scene_config=scene_config,
@@ -1095,83 +1068,31 @@ class PictureTakerFactory:
         axis_align_matrix = np.array(axis_align_matrix).reshape((4, 4))
         return axis_align_matrix
 
-    @staticmethod
-    def initialize_picture_takers_no_visual_feedback(
-        scene_configs: dict[str, SceneConfig],
-    ) -> dict[str, PictureTaker]:
-        picture_taker_dict = {}
-        model, _, _ = open_clip.create_model_and_transforms(
-            "ViT-B-16",  # e.g., ViT-B-16
-            pretrained="laion2b_s34b_b88k",  # e.g., laion2b_s34b_b88k
-            precision="fp16",
-        )
-        model.eval()
-        model = model.to("cuda")
-        tokenizer = open_clip.get_tokenizer("ViT-B-16")
-
-        negatives = ["object", "things", "stuff", "texture"]
-        with torch.no_grad():
-            tok_phrases = torch.cat([tokenizer(phrase) for phrase in negatives]).to(
-                "cuda"
-            )
-            neg_embeds = model.encode_text(tok_phrases)
-        neg_embeds /= neg_embeds.norm(dim=-1, keepdim=True)
-        for scene_name, scene_config in scene_configs.items():
-            h5_dict = PictureTakerFactory.load_h5_file(scene_config.load_h5_config)
-            thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
-            scene_mesh, axis_align_matrix = PictureTakerFactory.load_mesh(
-                scene_config.load_mesh, scene_config.load_metadata
-            )
-            lerf_pipeline = PictureTakerFactory.initialize_lerf_pipeline(
-                scene_config.load_lerf_config, scene_name
-            )
-            picture_taker_dict[scene_name] = PictureTaker(
-                scene=scene_config.scene_name,
-                scene_config=scene_config,
-                lerf_pipeline=lerf_pipeline,
-                h5_dict=h5_dict,
-                clip_model=model,
-                tokenizer=tokenizer,
-                neg_embeds=neg_embeds,
-                negative_words_length=len(negatives),
-                thread_pool_executor=thread_pool_executor,
-                openscene_embedding=None,
-                clip_preprocess=None,
-                mesh=scene_mesh,
-                device=None,
-                axis_align_matrix=axis_align_matrix,
-            )
-
-        return picture_taker_dict
 
     @staticmethod
     def initialize_picture_takers_no_gpt(
         scene_configs: dict[str, SceneConfig],
     ) -> dict[str, PictureTaker]:
         picture_taker_dict = {}
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         model, _, _ = open_clip.create_model_and_transforms(
             "ViT-B-16",  # e.g., ViT-B-16
             pretrained="laion2b_s34b_b88k",  # e.g., laion2b_s34b_b88k
             precision="fp16",
+            device=device,
         )
         model.eval()
-        model = model.to("cuda")
         tokenizer = open_clip.get_tokenizer("ViT-B-16")
 
         negatives = ["object", "things", "stuff", "texture"]
         with torch.no_grad():
-            tok_phrases = torch.cat([tokenizer(phrase) for phrase in negatives]).to(
-                "cuda"
-            )
+            tok_phrases = torch.cat([tokenizer(phrase) for phrase in negatives]).to(device)
             neg_embeds = model.encode_text(tok_phrases)
         neg_embeds /= neg_embeds.norm(dim=-1, keepdim=True)
         for scene_name, scene_config in scene_configs.items():
             h5_dict = PictureTakerFactory.load_h5_file(scene_config.load_h5_config)
             mesh = PictureTakerFactory.load_inthewild_mesh(scene_config.load_mesh)
             thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
-            # lerf_pipeline = PictureTakerFactory.initialize_lerf_pipeline(
-            #     scene_config.load_lerf_config, scene_name
-            # )
             lerf_pipeline = None
             picture_taker_dict[scene_name] = PictureTaker(
                 scene=scene_config.scene_name,
@@ -1185,72 +1106,21 @@ class PictureTakerFactory:
                 thread_pool_executor=thread_pool_executor,
                 openscene_embedding=None,
                 clip_preprocess=None,
-                device=None,
+                device=device,
                 mesh=mesh,
                 axis_align_matrix=None,
             )
 
         return picture_taker_dict
 
-    @staticmethod
-    def initialize_picture_takers(
-        scene_configs: dict[str, SceneConfig],
-    ) -> dict[str, PictureTaker]:
-        picture_taker_dict = {}
-        model, _, _ = open_clip.create_model_and_transforms(
-            "ViT-B-16",  # e.g., ViT-B-16
-            pretrained="laion2b_s34b_b88k",  # e.g., laion2b_s34b_b88k
-            precision="fp16",
-        )
-        model.eval()
-        model = model.to("cuda")
-        tokenizer = open_clip.get_tokenizer("ViT-B-16")
-
-        negatives = ["object", "things", "stuff", "texture"]
-        with torch.no_grad():
-            tok_phrases = torch.cat([tokenizer(phrase) for phrase in negatives]).to(
-                "cuda"
-            )
-            neg_embeds = model.encode_text(tok_phrases)
-        neg_embeds /= neg_embeds.norm(dim=-1, keepdim=True)
-
-        for scene_name, scene_config in scene_configs.items():
-            lerf_pipeline = PictureTakerFactory.initialize_lerf_pipeline(
-                scene_config.load_lerf_config, scene_name
-            )
-            h5_dict = PictureTakerFactory.load_h5_file(scene_config.load_h5_config)
-            thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
-            picture_taker_dict[scene_name] = PictureTaker(
-                scene=scene_config.scene_name,
-                scene_config=scene_config,
-                lerf_pipeline=lerf_pipeline,
-                h5_dict=h5_dict,
-                clip_model=model,
-                tokenizer=tokenizer,
-                neg_embeds=neg_embeds,
-                negative_words_length=len(negatives),
-                thread_pool_executor=thread_pool_executor,
-            )
-
-        return picture_taker_dict
-
-    @staticmethod
-    def initialize_lerf_pipeline(load_config: str, scene_name: str) -> Pipeline:
-        initial_dir = os.getcwd()
-        print(str(Settings.NERF_DATA_PATH + "/" + scene_name))
-        os.chdir(Settings.NERF_DATA_PATH + "/" + scene_name)
-        import pdb; pdb.set_trace()
-        _, lerf_pipeline, _, _ = eval_setup(Path(load_config), eval_num_rays_per_chunk=None, test_mode="inference")
-        os.chdir(initial_dir)
-        return lerf_pipeline
 
     @staticmethod
     def load_h5_file(load_config: str) -> dict:
         print(load_config)
         hdf5_file = h5py.File(load_config, "r")
         # batch_idx = 5
-        points = hdf5_file["points_scannet"]["points_scannet"][:]
-        # points = hdf5_file["points"]["points"][:]
+        # points = hdf5_file["points_scannet"]["points_scannet"][:]
+        points = hdf5_file["points"]["points"][:]
         origins = hdf5_file["origins"]["origins"][:]
         directions = hdf5_file["directions"]["directions"][:]
 

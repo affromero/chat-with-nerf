@@ -6,7 +6,7 @@ class Chat_With_NeRF_Settings:
     CLIP_FILTERING_THRESHOLD: float = 21  # range is (0, 100)
     default_scene: str = "scene0025_00"
     INITIAL_MSG_FOR_DISPLAY = "Hello there! What can I help you find in this room?"
-    MAX_TURNS = 10
+    MAX_TURNS = 1000
     USE_FAKE_GROUNDER: bool = False
     DEFAULT_IMAGE_TOKEN = "<image>"
     DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"

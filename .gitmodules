@@ -1,3 +1,18 @@
 [submodule "tiny-cuda-nn"]
 	path = tiny-cuda-nn
 	url = https://github.com/NVlabs/tiny-cuda-nn.git
+[submodule "nerfstudio"]
+	path = dependencies/nerfstudio
+	url = https://github.com/affromero/nerfstudio_export.git
+[submodule "colmap"]
+	path = dependencies/colmap
+	url = https://github.com/colmap/colmap.git
+[submodule "lerf_lite"]
+	path = dependencies/lerf_lite
+	url = https://github.com/sled-group/lerf_lite.git
+[submodule "lerf"]
+	path = dependencies/lerf
+	url = https://github.com/kerrj/lerf.git
+[submodule "nerfstudio_hax"]
+	path = dependencies/nerfstudio_hax
+	url = https://github.com/affromero/nerfstudio.git

@@ -18,6 +18,9 @@ data_inthewild/
 .pytest_cache/
 gradio_cached_examples/
 ```
-outputs/exported/lerf/2023-09-02_173746/nerfstudio_model/step-000029999.ckpt
+outputs/
 data
 run_api.sh
+user_shared
+outputs/person/dino.info
+data.h5

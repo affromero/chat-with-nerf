@@ -35,29 +35,6 @@ class ModelContextManager:
     def get_model_context(cls, scene_name) -> ModelContext:
         return ModelContextManager.initialize_model_context(scene_name)
 
-    @classmethod
-    def get_model_no_gpt_context(cls, scene_name) -> ModelContext:
-        if Settings.IS_EVALUATION:
-            return ModelContextManager.initialize_model_no_gpt_context(scene_name)
-        elif cls.model_context is None:
-            cls.model_context = ModelContextManager.initialize_model_no_gpt_context(
-                scene_name
-            )
-        return cls.model_context
-
-    @classmethod
-    def get_model_no_visual_feedback_context(cls, scene_name) -> ModelContext:
-        if Settings.IS_EVALUATION:
-            return ModelContextManager.initialize_model_no_visual_feedback_context(
-                scene_name
-            )
-        elif cls.model_context is None:
-            cls.model_context = (
-                ModelContextManager.initialize_model_no_visual_feedback_context(
-                    scene_name
-                )
-            )
-        return cls.model_context
 
     @classmethod
     def get_model_context_with_gpt(cls, scene_name: str) -> ModelContext:
@@ -87,34 +64,6 @@ class ModelContextManager:
         )
         return ModelContext(scene_configs, picture_taker_dict, None)
 
-    @staticmethod
-    def initialize_model_no_gpt_context(scene_name: str) -> ModelContext:
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        sys.path.append(project_root)
-        logger.info("Search for all Scenes and Set the current Scene")
-        scene_configs = ModelContextManager.search_scenes(
-            Path(Settings.data_path) / scene_name
-        )
-        picture_taker_dict = PictureTakerFactory.get_picture_takers_no_gpt(
-            scene_configs
-        )
-        # picture_taker_dict = PictureTakerFactory.get_picture_takers_no_visual_feedback_openscene(
-        #     scene_configs
-        # )
-        return ModelContext(scene_configs, picture_taker_dict, None)
-
-    @staticmethod
-    def initialize_model_no_visual_feedback_context(scene_name: str) -> ModelContext:
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        sys.path.append(project_root)
-        logger.info("Search for all Scenes and Set the current Scene")
-        scene_configs = ModelContextManager.search_scenes(
-            Settings.data_path, scene_name
-        )
-        picture_taker_dict = PictureTakerFactory.get_picture_takers_no_visual_feedback(
-            scene_configs
-        )
-        return ModelContext(scene_configs, picture_taker_dict, None)
 
     @staticmethod
     def initialize_model_context(scene_name: str) -> ModelContext:
@@ -144,23 +93,20 @@ class ModelContextManager:
         logger.info(f"scene_path: {scene_path}")
         with open(scene_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        replacements = {
-            "/workspace/chat-with-nerf-dev/chat-with-nerf/data": "data/lerf_data_experiments/",
-            "/workspace/chat-with-nerf-eval/data/scannet": "data/scannet",
-            "/workspace/openscene_data": "data/openscene_data",
-        }
+        # replacements = {
+        #     "/workspace/chat-with-nerf-dev/chat-with-nerf/data": "data/lerf_data_experiments",
+        #     "/workspace/chat-with-nerf-eval/data/scannet": "data/scannet",
+        #     "/workspace/openscene_data": "data/openscene_data",
+        # }
 
-        for key, value in replacements.items():
-            for k, v in data.items():
-                if isinstance(v, str):
-                    data[k] = v.replace(key, value)
+        # for key, value in replacements.items():
+        #     for k, v in data.items():
+        #         if isinstance(v, str):
+        #             data[k] = v.replace(key, value)
         logger.info(f"scene data: {data}")
         scene = SceneConfig(
             sc_name,
-            data["load_lerf_config"],
             data["load_embedding"],
-            data["camera_path"],
-            data["nerf_exported_mesh_path"],
             data["load_openscene"],
             data["load_mesh"],
             data["load_metadata"],
