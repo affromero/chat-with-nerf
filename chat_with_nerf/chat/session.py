@@ -9,7 +9,7 @@ from attrs import define, field
 import pickle
 
 from chat_with_nerf import logger
-from chat_with_nerf.settings import Settings
+from chat_with_nerf.settings import Chat_With_NeRF_Settings
 
 
 @dataclass
@@ -23,6 +23,7 @@ class Session:
     chat_history_for_llm: list[tuple]
     chat_history_for_display: list[tuple]
     chat_counter: int
+    settings: Chat_With_NeRF_Settings
     grounding_result_mesh_path: str | None = None
     ground_result: list[tuple[float]] | None = None
     candidate: list | None = None
@@ -40,18 +41,19 @@ class Session:
     camera_poses: list | None = None
 
     @classmethod
-    def create(cls):
-        return Session.create_for_scene(Settings.default_scene)
+    def create(cls, settings: Chat_With_NeRF_Settings):
+        return Session.create_for_scene(settings.default_scene, settings)
 
     @classmethod
-    def create_for_scene(cls, scene: str):
+    def create_for_scene(cls, scene: str, settings: Chat_With_NeRF_Settings):
         session = cls(
             session_id=str(uuid.uuid4()),
             start_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             scene=scene,
             chat_history_for_llm=[],
-            chat_history_for_display=[(None, Settings.INITIAL_MSG_FOR_DISPLAY)],
+            chat_history_for_display=[(None, settings.INITIAL_MSG_FOR_DISPLAY)],
             chat_counter=0,
+            settings=settings,
         )
         logger.info(
             f"Creating a new session {session.session_id} with scene {session.scene}."

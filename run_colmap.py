@@ -1,14 +1,16 @@
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
 import multiprocessing
 import os
 from pathlib import Path
 import subprocess
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias, cast
 import pycolmap
 import tyro
 from rich.console import Console
 
 from colmap2nerf import colmap2nerf
+
+MATCHING_TYPES: TypeAlias = Literal["exhaustive", "sequential", "spatial", "tree", "transitive"]
 
 console = Console()
 
@@ -17,7 +19,13 @@ console = Console()
 def run_reconstruction(
     root: Path,
     options: dict[str, Any] | None = None,
-) -> pycolmap.Reconstruction:
+) -> tuple[pycolmap.Reconstruction, str]:
+    """
+    Run the 3D reconstruction using COLMAP.
+    Args:
+        root: The root folder containing the database.db and images folder.
+        options: Additional options to pass to the reconstruction.
+    """
     database_path = root / "database.db"
     if not database_path.exists():
         raise FileNotFoundError(f"Database file {database_path} not found.")
@@ -60,8 +68,9 @@ def run_reconstruction(
             raise FileNotFoundError(f"File {bin_file} not found.")
     
     # convert bin files to txt files
-    txt_folder = str(models_path) + "_txt"
+    txt_folder = str(Path(str(models_path) + "_txt") / str(largest_index))
     if not os.path.exists(txt_folder):
+        Path(txt_folder).mkdir(parents=True, exist_ok=True)
         subprocess.run([f"colmap model_converter \
         --input_path {bin_folder} \
         --output_path {txt_folder} \
@@ -72,9 +81,14 @@ def run_reconstruction(
         + f"\n\tnum_input_images = {len(reconstructions[largest_index].images)}",
     )
 
-    return reconstructions[largest_index]
+    return reconstructions[largest_index], txt_folder
 
-def automatic_reconstructor(root: str, camera_model: str = "SIMPLE_RADIAL_FISHEYE") -> None:
+def automatic_reconstructor(root: str, /, *, camera_model: str = "SIMPLE_PINHOLE", matching: MATCHING_TYPES) -> None:
+    """
+    Automatically reconstructs 3D points from images in a folder.
+    First, it will extract features from the images, then match features, and then reconstruct 3D points.
+    Finally, it will convert the 3D points to NeRF format.
+    """
     # different camera models: https://github.com/NVlabs/instant-ngp/blob/master/scripts/colmap2nerf.py#L238
     image_folder = os.path.join(root, "images")
     # image_folder contains the images to be reconstructed
@@ -83,6 +97,9 @@ def automatic_reconstructor(root: str, camera_model: str = "SIMPLE_RADIAL_FISHEY
     
     console.rule(f"Automatic 3D Reconstruction - {image_folder}", characters="=")
 
+    # --------------------------------------------------------------------------------------------------- #
+    # ---------------------------------------- Extract features ----------------------------------------- #
+    # --------------------------------------------------------------------------------------------------- #
     console.rule("Extracting features")
     # https://colmap.github.io/tutorial.html#feature-detection-and-extraction
     database_path = os.path.join(root, "database.db")
@@ -92,25 +109,61 @@ def automatic_reconstructor(root: str, camera_model: str = "SIMPLE_RADIAL_FISHEY
     else:
         console.log(f"Features already extracted and saved to {database_path}")
 
+    # --------------------------------------------------------------------------------------------------- #
+    # ----------------------------------------- Match features ------------------------------------------ #
+    # --------------------------------------------------------------------------------------------------- #
     console.rule("Matching features")
     # https://colmap.github.io/tutorial.html#feature-matching-and-geometric-verification
-    pycolmap.match_exhaustive(database_path)
+    if matching == "exhaustive":
+        pycolmap.match_exhaustive(database_path)
+    elif matching == "sequential":
+        pycolmap.match_sequential(database_path)
+    elif matching == "spatial":
+        pycolmap.match_spatial(database_path)
+    elif matching == "tree":
+        # https://demuc.de/colmap/
+        # Vocabulary tree with 32K visual words: https://demuc.de/colmap/vocab_tree_flickr100K_words32K.bin
+        # (for small-scale image collections, i.e. 100s to 1,000s of images)
+        # Vocabulary tree with 256K visual words: https://demuc.de/colmap/vocab_tree_flickr100K_words256K.bin
+        # (for medium-scale image collections, i.e. 1,000s to 10,000s of images)
+        # Vocabulary tree with 1M visual words: https://demuc.de/colmap/vocab_tree_flickr100K_words1M.bin
+        # (for large-scale image collections, i.e. 10,000s - 100,000s of images)
+        default_tree = "vocab_tree_flickr100K_words256K.bin"
+        if not os.path.exists(default_tree):
+            # download the default tree
+            console.log(f"Downloading default vocabulary tree {default_tree}")
+            subprocess.run(["wget", f"https://demuc.de/colmap/{default_tree}"], check=True)
+        matching_opt= pycolmap.VocabTreeMatchingOptions(vocab_tree_path=default_tree)
+        pycolmap.match_vocabtree(database_path, matching_options=matching_opt)
 
+    # --------------------------------------------------------------------------------------------------- #
+    # -------------------------------------- Reconstruct 3D points -------------------------------------- #
+    # --------------------------------------------------------------------------------------------------- #
     console.rule("Reconstructing 3D points")
     # https://colmap.github.io/tutorial.html#sparse-reconstruction
-    run_reconstruction(Path(root))
+    _, sparse_txt_path = run_reconstruction(Path(root))
 
+    # --------------------------------------------------------------------------------------------------- #
+    # ------------------------------------- Convert to NeRF format -------------------------------------- #
+    # --------------------------------------------------------------------------------------------------- #
     console.rule("Converting to NeRF format")
     colmap2nerf(
-        root=os.path.join(root, "sparse_txt"),
+        root=sparse_txt_path,
         image_folder=os.path.join(root, "images"),
         output_json=os.path.join(root, "transforms.json"),
     )
 
+    # --------------------------------------------------------------------------------------------------- #
+    # ------------------------------------- Finished 3D reconstruction ---------------------------------- #
+    # --------------------------------------------------------------------------------------------------- #
     console.rule("Finished 3D reconstruction", characters="=")
 
 @dataclass
 class ExtractNeRF:
+    """
+    Extract NeRF from the 3D points reconstructed by COLMAP.
+    """
+
     root: str
     """ Root directory containing the transforms.json file. """
 
@@ -133,34 +186,72 @@ class ExtractNeRF:
     def output_dir(self) -> str:
         return os.path.join(self.__output_dir, os.path.basename(self.root), self.method)
 
+    @property
+    def embeddings_file(self) -> str:
+        _file = os.path.join(self.output_dir, "embeddings.h5")
+        return _file
+    
+    @property
+    def mesh_file(self) -> str:
+        _file = os.path.join(self.output_dir, "poisson_mesh.ply")
+        if not os.path.exists(_file):
+            raise FileNotFoundError(f"File {_file} not found. Check output directory. Or run create_h5_from_nerf.")
+        return _file
+
+    @property
+    def point_cloud_file(self) -> str:
+        _file = os.path.join(self.output_dir, "point_cloud.ply")
+        if not os.path.exists(_file):
+            raise FileNotFoundError(f"File {_file} not found. Check output directory. Or run create_h5_from_nerf.")
+        return _file
+
     def run_nerf(self) -> None:
-        # check there is a transforms.json file
-        command = f"poetry run ns-train {self.method} --data {self.root} --output-dir {self.__output_dir}"
+        """ Run NeRF training on the frames with their respective poses. """
+        command = f"poetry run ns-train {self.method} --data {self.root} --output-dir {self.__output_dir} --pipeline.model.predict-normals True"
+        # normal prediction is important for exporting the mesh
         console.log(f"Running NeRF training with {command=}")
         subprocess.run(command, shell=True, check=True)
 
     def create_h5_from_nerf(self) -> None:
+        """ Create h5 files from the NeRF models. Useful for [ChatWithNeRF](https://chat-with-nerf.github.io). """
         latest_folder = sorted(list(Path(self.output_dir).glob("*")))[-1]
         if not os.path.exists(latest_folder):
             raise FileNotFoundError(f"Folder {latest_folder} not found. Check output directory.")
         config_file = str(latest_folder / "config.yml")
-        output_dir = str(latest_folder / "nerfstudio_models")
-        command = f"poetry run ns-export pointcloud --load-config {config_file} --output-dir {output_dir} --normal_method open3d"
+        command = f"poetry run ns-export poisson \
+            --load-config {config_file} \
+            --output-dir {self.output_dir} \
+            --hdf5_file {self.embeddings_file} \
+            --save-point-cloud"
+        # poisson is used for exporting the mesh: https://docs.nerf.studio/quickstart/export_geometry.html#poisson-surface-reconstruction
         console.log(f"Running NeRF export with {command=}")
         subprocess.run(command, shell=True, check=True)
+        console.log(f"Exported mesh to {self.mesh_file}, point cloud to {self.point_cloud_file}, and h5 embeddings to {self.embeddings_file}", style="green")
 
     def run(self) -> None:
+        """ Run the NeRF training and create h5 files. """
         self.run_nerf()
         self.create_h5_from_nerf()
 
 
-def main(root: str) -> None:
-    automatic_reconstructor(root)
-    ExtractNeRF(root).run()
+def main(root: str, camera_model: str, matching: MATCHING_TYPES, run_nerf: bool) -> tuple[str, str, str] | None:
+    """ Main function to run the 3D reconstruction. """
+    automatic_reconstructor(root, camera_model=camera_model, matching=matching)
+    if run_nerf:
+        nerf = ExtractNeRF(root)
+        if not os.path.exists(nerf.embeddings_file):
+            nerf.run()
+        return (
+            nerf.embeddings_file,
+            nerf.mesh_file,
+            nerf.point_cloud_file,
+        )
 
 def grant_3d_llm() -> None:
     root = "user_shared/grant_llm_3d/quest_020924/WakeIsland_1109/colmap"
-    main(root)
+    camera_model = "SIMPLE_PINHOLE"
+    matching = cast(MATCHING_TYPES, "tree")
+    main(root, camera_model=camera_model, matching=matching, run_nerf=False)
 
 def cli() -> None:
     tyro.cli(main)

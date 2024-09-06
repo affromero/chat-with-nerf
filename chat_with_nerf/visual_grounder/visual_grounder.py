@@ -9,7 +9,6 @@ from chat_with_nerf.chat.session import Session
 from chat_with_nerf import logger
 from chat_with_nerf.visual_grounder.captioner import BaseCaptioner
 from chat_with_nerf.visual_grounder.picture_taker import PictureTaker
-from chat_with_nerf.settings import Settings
 
 CONSOLE = Console(width=120)
 

@@ -55,7 +55,7 @@ def qvec2rotmat(qvec: np.ndarray) -> np.ndarray:
 
 def sharpness(imagePath: str) -> float:
     # https://github.com/microsoft/pylance-release/issues/138
-    # run "stubgen -m cv2 -o {CV2_PACKAGE_FOLDER}" to generate the stubs and suppress the pylance errors
+    # run "poetry run stubgen -m cv2 -o {CV2_PACKAGE_FOLDER}" to generate the stubs and suppress the pylance errors
     # and then change name of the generated file to __init__.pyi
 	image = cv2.imread(imagePath)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

@@ -7,7 +7,7 @@ import os
 from copy import deepcopy
 from chat_with_nerf import logger
 from chat_with_nerf.chat.session import Session
-from chat_with_nerf.settings import Settings
+from chat_with_nerf.settings import Chat_With_NeRF_Settings
 
 from chat_with_nerf.visual_grounder.captioner import BaseCaptioner
 from chat_with_nerf.visual_grounder.picture_taker import PictureTaker
@@ -31,19 +31,6 @@ def ground(
     :param captioner: a BaseCaptioner model
     :type captioner: BaseCaptioner
     """
-
-    if Settings.USE_FAKE_GROUNDER:
-        print("FAKE: ", Settings.USE_FAKE_GROUNDER)
-        return [
-            (
-                "/workspace/chat-with-nerf/grounder_output/rgb/000.png",
-                "a long sofa with white cover and yellow accent, metallic legs",
-            ),
-            (
-                "/workspace/chat-with-nerf/grounder_output/rgb/001.png",
-                "a loveseat with a pillow on top, white cover and yellow accent, metallic legs",
-            ),
-        ]
 
     logger.info(f"Ground Text: {ground_text}")
     # TODO: fix this!
@@ -156,13 +143,13 @@ def create_bbox(center, extents, color=[1, 0, 0], radius=0.02):
     return cylinders
 
 
-def highlight_clusters_in_mesh(session, mesh) -> str:
+def highlight_clusters_in_mesh(session, mesh, settings: Chat_With_NeRF_Settings) -> str:
     # Visualize the highlighted points by drawing 3D bounding boxes overlay on a mesh
     mesh = deepcopy(mesh)
-    output_path = os.path.join(Settings.output_path, "mesh_vis")
+    output_path = os.path.join(settings.output_path, "mesh_vis")
     if not os.path.exists(output_path):
         os.makedirs(output_path)
-    if Settings.IS_SCANNET:
+    if settings.IS_SCANNET:
         mesh_file_path = os.path.join(output_path, f"{session.session_id}.obj")
     else:
         mesh_file_path = os.path.join(output_path, f"{session.session_id}.glb")

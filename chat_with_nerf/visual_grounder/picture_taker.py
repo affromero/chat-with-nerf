@@ -12,6 +12,7 @@ import open3d as o3d
 import torch
 import open_clip
 from attrs import define
+from chat_with_nerf.settings import Chat_With_NeRF_Settings
 from nerfstudio.cameras.camera_paths import get_path_from_json
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils import install_checks
@@ -26,7 +27,6 @@ from transformers import AutoTokenizer, CLIPVisionModel
 from chat_with_nerf import logger
 from chat_with_nerf.chat.session import Session
 from chat_with_nerf.model.scene_config import SceneConfig
-from chat_with_nerf.settings import Settings
 from chat_with_nerf.visual_grounder.camera_pose import CameraPose
 from chat_with_nerf.visual_grounder.image_ref import ImageRef
 from typing import Callable, Optional
@@ -48,10 +48,11 @@ class PictureTaker:
     device: Optional[str]
     mesh: Optional[o3d.geometry.TriangleMesh]
     axis_align_matrix: Optional[np.ndarray]
+    settings: Chat_With_NeRF_Settings
 
     @staticmethod
     def render_picture(
-        lerf_pipeline: Pipeline, camera_pose: dict, session_id: str
+        lerf_pipeline: Pipeline, camera_pose: dict, session_id: str, settings: Chat_With_NeRF_Settings
     ) -> ImageRef:
         logger.info("Picture Taking...")
         install_checks.check_ffmpeg_installed()
@@ -59,7 +60,7 @@ class PictureTaker:
         # camera_type = CameraType.PESPECTIVE
         camera.rescale_output_resolution(1.0)
         camera = camera.to(lerf_pipeline.device)
-        output_filepath_path = Path(Settings.output_path) / session_id / "images"
+        output_filepath_path = Path(settings.output_path) / session_id / "images"
         rgb_image_dir = output_filepath_path / "rgb"
         rgb_image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,7 +107,6 @@ class PictureTaker:
                 probability_per_scale_per_phrase = pos_prob
 
         possibility_array = probability_per_scale_per_phrase.detach().cpu().numpy().squeeze()  # type: ignore # noqa: E501
-        # if Settings.TOP_THREE_NO_GPT:'
 
         centroids_list, extends_list, values_list = self.find_clusters(
             possibility_array
@@ -131,7 +131,6 @@ class PictureTaker:
                 probability_per_scale_per_phrase = pos_prob
 
         possibility_array = probability_per_scale_per_phrase.detach().cpu().numpy().squeeze()  # type: ignore # noqa: E501
-        # if Settings.TOP_THREE_NO_GPT:'
 
         centroids_list, extends_list, values_list = self.find_clusters(
             possibility_array
@@ -166,7 +165,7 @@ class PictureTaker:
         top_indices = np.argpartition(probability_over_all_points, -top_count)[
             -top_count:
         ]
-        if Settings.IS_SCANNET:
+        if self.settings.IS_SCANNET:
             points_scannet = self.h5_dict["points_scannet"]
             # top_positions = points_scannet[top_indices]
             top_values = probability_over_all_points[top_indices].flatten()
@@ -387,7 +386,6 @@ class PictureTaker:
                 bboxes.append((sx, sy, sz))
 
                 # finding best candidate in nerfstudio coordination system
-                # if Settings.NO_VISUAL_FEEDBACK is False:
                 valuess_for_members = top_values[labels == cluster_id]
                 best_index = np.argmax(valuess_for_members)
 
@@ -458,7 +456,6 @@ class PictureTaker:
                     origin_for_best_member_list.append(origin_of_best_member)
 
         paths2images = []
-        # if Settings.NO_VISUAL_FEEDBACK is False:
         if session.working_scene_name.startswith("s"):
             c2w_list = [
                 self.compute_camera_to_world_matrix(
@@ -702,7 +699,7 @@ class PictureTaker:
         self, session_id: str, labels: np.ndarray, top_positions: np.ndarray
     ) -> str:
         # Visualize the highlighted points by drawing 3D bounding boxes overlay on a mesh
-        output_path = os.path.join(Settings.output_path, "mesh_vis")
+        output_path = os.path.join(self.settings.output_path, "mesh_vis")
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         mesh_file_path = os.path.join(output_path, f"{session_id}.glb")
@@ -956,7 +953,7 @@ class PictureTakerFactory:
 
     @classmethod
     def get_picture_takers_no_visual_feedback_openscene(
-        cls, scene_configs: dict[str, SceneConfig]
+        cls, scene_configs: dict[str, SceneConfig], settings: Chat_With_NeRF_Settings
     ) -> dict[str, PictureTaker]:
         if cls.picture_taker_dict is None:
             selected_configs_scannet = {
@@ -968,10 +965,10 @@ class PictureTakerFactory:
             picture_taker_dict_inthewild = {}
             picture_taker_dict_scannet = {}
             if selected_configs_scannet:
-                picture_taker_dict_scannet = PictureTakerFactory.initialize_picture_takers_no_visual_feedback_openscene(selected_configs_scannet)
+                picture_taker_dict_scannet = PictureTakerFactory.initialize_picture_takers_no_visual_feedback_openscene(selected_configs_scannet, settings)
                 # picture_taker_dict_scannet = PictureTakerFactory.initialize_picture_takers_no_gpt(selected_configs_scannet)
             if selected_configs_inthewild:
-                picture_taker_dict_inthewild = PictureTakerFactory.initialize_picture_takers_no_gpt(selected_configs_inthewild)
+                picture_taker_dict_inthewild = PictureTakerFactory.initialize_picture_takers_no_gpt(selected_configs_inthewild, settings)
             combined_dict = {
                 **picture_taker_dict_inthewild,
                 **picture_taker_dict_scannet,
@@ -981,7 +978,7 @@ class PictureTakerFactory:
 
     @staticmethod
     def initialize_picture_takers_no_visual_feedback_openscene(
-        scene_configs: dict[str, SceneConfig],
+        scene_configs: dict[str, SceneConfig], settings: Chat_With_NeRF_Settings
     ) -> dict[str, PictureTaker]:
         """_summary_
 
@@ -1001,7 +998,7 @@ class PictureTakerFactory:
             scene_mesh, axis_align_matrix = PictureTakerFactory.load_mesh(
                 scene_config.load_mesh, scene_config.load_metadata
             )
-            thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
+            thread_pool_executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
             picture_taker_dict[scene_name] = PictureTaker(
                 scene=scene_config.scene_name,
                 scene_config=scene_config,
@@ -1017,6 +1014,7 @@ class PictureTakerFactory:
                 mesh=scene_mesh,
                 device=device,
                 axis_align_matrix=axis_align_matrix,
+                settings=settings,
             )
 
         return picture_taker_dict
@@ -1071,7 +1069,7 @@ class PictureTakerFactory:
 
     @staticmethod
     def initialize_picture_takers_no_gpt(
-        scene_configs: dict[str, SceneConfig],
+        scene_configs: dict[str, SceneConfig], settings: Chat_With_NeRF_Settings
     ) -> dict[str, PictureTaker]:
         picture_taker_dict = {}
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1092,7 +1090,7 @@ class PictureTakerFactory:
         for scene_name, scene_config in scene_configs.items():
             h5_dict = PictureTakerFactory.load_h5_file(scene_config.load_h5_config)
             mesh = PictureTakerFactory.load_inthewild_mesh(scene_config.load_mesh)
-            thread_pool_executor = ThreadPoolExecutor(max_workers=Settings.MAX_WORKERS)
+            thread_pool_executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
             lerf_pipeline = None
             picture_taker_dict[scene_name] = PictureTaker(
                 scene=scene_config.scene_name,
@@ -1109,6 +1107,7 @@ class PictureTakerFactory:
                 device=device,
                 mesh=mesh,
                 axis_align_matrix=None,
+                settings=settings,
             )
 
         return picture_taker_dict

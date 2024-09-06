@@ -24,3 +24,4 @@ run_api.sh
 user_shared
 outputs/person/dino.info
 data.h5
+vocab_tree_flickr100K_words256K.bin

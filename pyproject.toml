@@ -52,6 +52,7 @@ imageio = {extras = ["ffmpeg"], version = "^2.35.1"}
 pycolmap = {path = "dependencies/colmap/pycolmap"}
 lerf = {path = "dependencies/lerf", develop = true}
 nerfstudio = {path = "dependencies/nerfstudio_hax", develop = true}
+mypy = "^1.11.2"
 
 [[tool.poetry.source]]
 name = "PytorchCuda"

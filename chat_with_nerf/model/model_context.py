@@ -9,7 +9,7 @@ from attrs import define
 
 from chat_with_nerf import logger
 from chat_with_nerf.model.scene_config import SceneConfig
-from chat_with_nerf.settings import Settings
+from chat_with_nerf.settings import Chat_With_NeRF_Settings
 from chat_with_nerf.visual_grounder.captioner import (  # Blip2Captioner,
     BaseCaptioner,
 )
@@ -18,7 +18,6 @@ from chat_with_nerf.visual_grounder.picture_taker import (
     PictureTakerFactory,
 )
 
-from chat_with_nerf.settings import Settings
 
 
 @define
@@ -31,57 +30,29 @@ class ModelContext:
 class ModelContextManager:
     model_context: Optional[ModelContext] = None
 
-    @classmethod
-    def get_model_context(cls, scene_name) -> ModelContext:
-        return ModelContextManager.initialize_model_context(scene_name)
-
 
     @classmethod
-    def get_model_context_with_gpt(cls, scene_name: str) -> ModelContext:
-        if Settings.IS_EVALUATION:
-            return (
-                ModelContextManager.initialize_model_no_visual_feedback_openscene_context(scene_name)
-            )
-        elif cls.model_context is None:
-            cls.model_context = (
-                ModelContextManager.initialize_model_no_visual_feedback_openscene_context(scene_name)
-            )
-        return cls.model_context
+    def get_model_context_with_gpt(cls, scene_name: str, settings: Chat_With_NeRF_Settings) -> ModelContext:
+        return (
+            ModelContextManager.initialize_model_no_visual_feedback_openscene_context(scene_name, settings)
+        )
 
     @classmethod
     def initialize_model_no_visual_feedback_openscene_context(
-        cls, scene_name: str
+        cls, scene_name: str, settings: Chat_With_NeRF_Settings
     ) -> ModelContext:
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         sys.path.append(project_root)
         logger.info("Search for all Scenes and Set the current Scene")
-        data_path = Path(Settings.data_path) / scene_name
+        data_path = Path(settings.data_path) / scene_name
         scene_configs = ModelContextManager.search_scenes(data_path)
         picture_taker_dict = (
             PictureTakerFactory.get_picture_takers_no_visual_feedback_openscene(
-                scene_configs
+                scene_configs, settings
             )
         )
         return ModelContext(scene_configs, picture_taker_dict, None)
 
-
-    @staticmethod
-    def initialize_model_context(scene_name: str) -> ModelContext:
-        # Get the absolute path of the project's root directory
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-        # Add the project's root directory to sys.path
-        sys.path.append(project_root)
-
-        logger.info("Search for all Scenes and Set the current Scene")
-        scene_configs = ModelContextManager.search_scenes(
-            Settings.data_path, scene_name
-        )
-
-        logger.info("Initialize picture_taker for all scenes")
-        picture_taker_dict = PictureTakerFactory.get_picture_takers(scene_configs)
-
-        return ModelContext(scene_configs, picture_taker_dict, None)
 
     @staticmethod
     def search_scenes(path: str | Path) -> dict[str, SceneConfig]:

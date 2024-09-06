@@ -2,7 +2,6 @@ import os
 import threading
 import time
 import attr
-from collections import defaultdict
 from collections.abc import Generator
 import numpy as np
 import requests
@@ -12,16 +11,14 @@ from requests import Response
 from chat_with_nerf.chat.util import fix_brackets
 from chat_with_nerf import logger
 from chat_with_nerf.chat.grounder import (
-    ground_with_callback,
     ground_no_gpt_with_callback,
     ground_with_callback_with_gpt,
     highlight_clusters_in_mesh,
 )
 from chat_with_nerf.chat.session import Session
 from chat_with_nerf.model.model_context import ModelContext, ModelContextManager
-from chat_with_nerf.settings import Settings
 from chat_with_nerf.util import get_status_code_and_reason
-
+from chat_with_nerf.settings import Chat_With_NeRF_Settings
 
 @attr.define
 class Agent:
@@ -30,28 +27,14 @@ class Agent:
     OPENAI_API_KEY: str = attr.field(default=str(os.getenv("OPENAI_API_KEY")))
     MAX_ITERATION: int = 10
     scene_name: str = attr.field(default="scene0019_00")
+    settings: Chat_With_NeRF_Settings = attr.field(default=Chat_With_NeRF_Settings())
 
     def __attrs_post_init__(self):
         # Check for fake grounder
         print("API_URL: ", self.API_URL)
         print("OPENAI_API_KEY: ", self.OPENAI_API_KEY)
-        if self.scene_name is None:
-            raise ValueError("default scene_name is not set")
 
-        if not Settings.USE_FAKE_GROUNDER:
-            if Settings.NO_GPT:
-                self.model_context = ModelContextManager.get_model_no_gpt_context(
-                    self.scene_name
-                )
-            else:
-                self.model_context = ModelContextManager.get_model_context_with_gpt(self.scene_name)
-        else:
-            self.model_context = ModelContext(
-                scene_configs=None,
-                visual_grounder=defaultdict(lambda: None),
-                pipeline=None,
-                captioner=None,
-            )
+        self.model_context = ModelContextManager.get_model_context_with_gpt(self.scene_name, self.settings)
 
         # Raise exceptions for required environment variables
         if not self.API_URL:
@@ -293,12 +276,12 @@ class Agent:
                 break
 
             # exceed free tier limit
-            if session.chat_counter >= Settings.MAX_TURNS:
+            if session.chat_counter >= session.settings.MAX_TURNS:
                 session.chat_history_for_display.append(
                     (
                         None,
                         (
-                            f"**SYSTEM: Maximum number of free trial turns ({Settings.MAX_TURNS}) "
+                            f"**SYSTEM: Maximum number of free trial turns ({session.settings.MAX_TURNS}) "
                             "reached. Ending dialog.**"
                         ),
                     )
